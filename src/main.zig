@@ -11,6 +11,7 @@ const BORDER_THICKNESS: f32 = 1.5;
 const BORDER_COLOR = ray.Color{ .r = 105, .g = 105, .b = 105, .a = 255 };
 const GRID_ROW = 45;
 const GRID_COL = 45;
+const GRID_SCALE = ray.Vector2 { .x = 0.75, .y = 1 };
 const ALIVE_COLOR = ray.Color{ .r = 153, .g = 153, .b = 153, .a = 255 };
 const DEAD_COLOR = BACKGROUND_COLOR;
 
@@ -23,14 +24,14 @@ const Gol = struct {
     cells: [GRID_ROW][GRID_COL]Cell,
     cellSize: ray.Vector2,
     pause: bool,
-    borders: ray.Rectangle,
+    bounds: ray.Rectangle,
 
     fn new(bounds: ray.Rectangle) Gol {
         var this = Gol{
             .cells = undefined,
             .cellSize = undefined,
             .pause = true,
-            .borders = bounds,
+            .bounds = bounds,
         };
         updateCellSize(&this);
         resetGrid(&this);
@@ -38,12 +39,12 @@ const Gol = struct {
     }
 
     fn updateBounds(self: *Gol) void {
-        self.borders.width = @intToFloat(f32, ray.GetScreenWidth());
-        self.borders.height = @intToFloat(f32, ray.GetScreenHeight());
+        self.bounds.width = (@intToFloat(f32, ray.GetScreenWidth()) - self.bounds.x) * GRID_SCALE.x;
+        self.bounds.height = (@intToFloat(f32, ray.GetScreenHeight()) - self.bounds.y) * GRID_SCALE.y;
     }
 
     fn updateCellSize(self: *Gol) void {
-        self.cellSize = ray.Vector2{ .x = (self.borders.x + self.borders.width) / @floatCast(f32, GRID_COL), .y = (self.borders.y + self.borders.height) / @floatCast(f32, GRID_ROW) };
+        self.cellSize = ray.Vector2{ .x = (self.bounds.width - self.bounds.x) / @floatCast(f32, GRID_COL), .y = (self.bounds.height - self.bounds.y) / @floatCast(f32, GRID_ROW) };
     }
 
     fn randomize(self: *Gol, chance: f32) void {
@@ -98,8 +99,8 @@ fn drawGrid(gol: *const Gol) void {
     while (r < GRID_ROW) : (r += 1) {
         while (c < GRID_COL) : (c += 1) {
             var currentColor: ray.Color = undefined;
-            const currX = (@intToFloat(f32, c) * gol.cellSize.x) + gol.borders.x;
-            const currY = (@intToFloat(f32, r) * gol.cellSize.y) + gol.borders.y;
+            const currX = (@intToFloat(f32, c) * gol.cellSize.x) + gol.bounds.x;
+            const currY = (@intToFloat(f32, r) * gol.cellSize.y) + gol.bounds.y;
             if (gol.cells[r][c] == Cell.Alive) {
                 currentColor = ALIVE_COLOR;
             } else {
@@ -112,14 +113,14 @@ fn drawGrid(gol: *const Gol) void {
 
     r = 0;
     while (r < GRID_ROW) : (r += 1) {
-        const y = (@intToFloat(f32, r) * gol.cellSize.y) + gol.borders.y;
-        ray.DrawLineEx(ray.Vector2{ .x = gol.borders.x, .y = y }, ray.Vector2{ .x = gol.borders.x + gol.borders.width, .y = y }, BORDER_THICKNESS, BORDER_COLOR);
+        const y = (@intToFloat(f32, r) * gol.cellSize.y) + gol.bounds.y;
+        ray.DrawLineEx(ray.Vector2{ .x = gol.bounds.x, .y = y }, ray.Vector2{ .x = gol.bounds.x + gol.bounds.width, .y = y }, BORDER_THICKNESS, BORDER_COLOR);
     }
 
     c = 0;
     while (c < GRID_COL) : (c += 1) {
-        const x = (@intToFloat(f32, c) * gol.cellSize.x) + gol.borders.x;
-        ray.DrawLineEx(ray.Vector2{ .x = x, .y = gol.borders.y }, ray.Vector2{ .x = x, .y = gol.borders.y + gol.borders.height }, BORDER_THICKNESS, BORDER_COLOR);
+        const x = (@intToFloat(f32, c) * gol.cellSize.x) + gol.bounds.x;
+        ray.DrawLineEx(ray.Vector2{ .x = x, .y = gol.bounds.y }, ray.Vector2{ .x = x, .y = gol.bounds.y + gol.bounds.height }, BORDER_THICKNESS, BORDER_COLOR);
     }
 }
 
@@ -172,11 +173,11 @@ fn update_paused(gol: *Gol, isClicked: bool) void {
         return;
     }
     const mousePos = ray.GetMousePosition();
-    if (!isMouseInGrid(mousePos, gol.borders)) {
+    if (!isMouseInGrid(mousePos, gol.bounds)) {
         return;
     }
-    const col = @floatToInt(usize, (mousePos.x - gol.borders.x) / gol.cellSize.x);
-    const row = @floatToInt(usize, (mousePos.y - gol.borders.y) / gol.cellSize.y);
+    const col = @floatToInt(usize, (mousePos.x - gol.bounds.x) / gol.cellSize.x);
+    const row = @floatToInt(usize, (mousePos.y - gol.bounds.y) / gol.cellSize.y);
     if (gol.cells[row][col] == Cell.Alive) {
         gol.cells[row][col] = Cell.Dead;
     } else {
@@ -220,11 +221,13 @@ pub fn main() void {
     ray.InitWindow(900, 600, "Zig Automaton");
     ray.SetTargetFPS(60);
 
+    const startX = 0;
+    const startY = 0;
     const currentBounds = ray.Rectangle{
-        .x = 0,
-        .y = 0,
-        .width = @intToFloat(f32, ray.GetScreenWidth()) / 2,
-        .height = @intToFloat(f32, ray.GetScreenHeight()),
+        .x = startX,
+        .y = startY,
+        .width = (@intToFloat(f32, ray.GetScreenWidth()) - startX) * GRID_SCALE.x,
+        .height = (@intToFloat(f32, ray.GetScreenHeight()) - startY) * GRID_SCALE.y,
     };
     var current: Gol = Gol.new(currentBounds);
     var next: Gol = Gol.new(currentBounds);
@@ -247,7 +250,6 @@ pub fn main() void {
 
         if (!current.pause) {
             update_unpaused(&current, &next);
-            // current.pause = true;
         } else {
             update_paused(&current, clicked);
         }
